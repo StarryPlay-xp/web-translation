@@ -878,10 +878,13 @@
   }
 
   let panelReq = null; // 划词面板进行中的请求，关闭面板时取消
+  let panelUnfollow = null; // 解除面板跟随选区滚动
 
   function closePanel() {
     if (panelReq) panelReq.cancel();
     panelReq = null;
+    if (panelUnfollow) panelUnfollow();
+    panelUnfollow = null;
     if (panel) panel.remove();
     panel = null;
   }
@@ -891,8 +894,28 @@
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const text = sel.toString().trim();
     if (!text) return null;
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    return { text, rect };
+    // 复制一份 Range：之后页面选区变化不影响面板定位
+    const range = sel.getRangeAt(0).cloneRange();
+    return { text, range };
+  }
+
+  // 面板是 fixed 定位，页面（或内部滚动容器）滚动时按选区位移平移面板，使其跟随原文
+  function followRange(el, range, base) {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const r = range.getBoundingClientRect();
+      if (!r.width && !r.height) return; // 原文节点已被移除/替换，保持当前位置
+      el.style.transform = `translate(${r.left - base.left}px, ${r.top - base.top}px)`;
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('scroll', onScroll, true);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }
 
   function showSelIcon(info, x, y) {
@@ -907,12 +930,12 @@
     selIcon.addEventListener('mousedown', (e) => e.preventDefault()); // 保持选区
     selIcon.addEventListener('click', () => {
       hideSelIcon();
-      openPanel(info.text, info.rect);
+      openPanel(info.text, info.range);
     });
     root.appendChild(selIcon);
   }
 
-  async function openPanel(text, rect) {
+  async function openPanel(text, range) {
     const root = ensureUI();
     closePanel();
     text = text.slice(0, 5000);
@@ -928,12 +951,15 @@
 
     // 定位：优先放在选区下方，空间不够放上方
     const w = Math.min(380, window.innerWidth - 16);
-    const r = rect && rect.width + rect.height > 0 ? rect : { left: window.innerWidth / 2 - w / 2, bottom: 80, top: 80 };
+    const rect = range && range.getBoundingClientRect();
+    const anchored = !!rect && rect.width + rect.height > 0;
+    const r = anchored ? rect : { left: window.innerWidth / 2 - w / 2, bottom: 80, top: 80 };
     const left = Math.min(window.innerWidth - w - 8, Math.max(8, r.left));
     panel.style.left = `${left}px`;
     const below = window.innerHeight - r.bottom;
     if (below > 220 || below > r.top) panel.style.top = `${Math.min(r.bottom + 8, window.innerHeight - 120)}px`;
     else panel.style.bottom = `${window.innerHeight - r.top + 8}px`;
+    if (anchored) panelUnfollow = followRange(panel, range, rect);
 
     const thisPanel = panel;
     thisPanel.querySelector('.x').addEventListener('click', closePanel);
@@ -1018,7 +1044,7 @@
         const info = selectionInfo();
         if (!info || inEditable(window.getSelection().anchorNode)) return;
         if (!HAS_LETTER.test(info.text)) return;
-        if (S.selectionMode === 'direct') openPanel(info.text, info.rect);
+        if (S.selectionMode === 'direct') openPanel(info.text, info.range);
         else showSelIcon(info, e.clientX, e.clientY);
       }, 10);
     },
@@ -1069,7 +1095,7 @@
       case 'translateSelection': {
         const info = selectionInfo();
         const text = (info && info.text) || msg.text;
-        if (text) openPanel(text, info && info.rect);
+        if (text) openPanel(text, info && info.range);
         sendResponse({ ok: true });
         break;
       }
