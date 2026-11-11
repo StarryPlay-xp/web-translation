@@ -25,7 +25,7 @@
 2. 设置页 → 模型配置 → 选中 “DeepSeek” → 填入 API Key → 保存
 3. 点击“测试连接”，看到日语示例被翻译即成功
 
-模型名称默认 `deepseek-chat`，如 DeepSeek 更新了模型名，在设置页修改即可。
+模型名称默认 `deepseek-flash`（便宜、速度快）；需要更强的翻译质量可在设置页改为 `deepseek-v4-pro`。
 
 ## 接入其他模型
 

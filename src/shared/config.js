@@ -29,14 +29,14 @@
       label: 'DeepSeek（OpenAI 协议）',
       protocol: 'openai',
       baseURL: 'https://api.deepseek.com',
-      model: 'deepseek-chat'
+      model: 'deepseek-flash'
     },
     {
       key: 'deepseek-anthropic',
       label: 'DeepSeek（Anthropic 协议）',
       protocol: 'anthropic',
       baseURL: 'https://api.deepseek.com/anthropic',
-      model: 'deepseek-chat'
+      model: 'deepseek-flash'
     },
     {
       key: 'openai',
@@ -70,7 +70,7 @@
       protocol: 'openai',
       baseURL: 'https://api.deepseek.com',
       apiKey: '',
-      model: 'deepseek-chat',
+      model: 'deepseek-flash',
       temperature: '', // 留空 = 使用服务商默认值
       maxTokens: 8192,
       extraBody: '' // 追加到请求体的 JSON，例如 {"thinking":{"type":"disabled"}}
