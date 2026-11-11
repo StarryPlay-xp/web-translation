@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI 网页翻译</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="../../icons/icon32.png" alt="" />
+      <span class="title">AI 网页翻译</span>
+      <button id="openOptions" class="icon-btn" title="设置">⚙</button>
+    </header>
+
+    <div id="keyWarning" class="banner" hidden>
+      当前模型还没有填写 API Key，<a id="gotoOptions">去设置</a>
+    </div>
+
+    <main>
+      <div class="lang-row">
+        <label class="field">
+          <span class="label">原文语言 <em id="detected"></em></span>
+          <select id="sourceLang"></select>
+        </label>
+        <span class="arrow">→</span>
+        <label class="field">
+          <span class="label">译文语言</span>
+          <select id="targetLang"></select>
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="label">翻译模型</span>
+        <select id="provider"></select>
+      </label>
+
+      <div class="field">
+        <span class="label">显示方式</span>
+        <div class="segmented" id="displayMode">
+          <button data-value="bilingual">双语对照</button>
+          <button data-value="replace">仅显示译文</button>
+        </div>
+      </div>
+
+      <button id="toggle" class="primary">翻译此页面</button>
+
+      <label class="switch-row">
+        <input type="checkbox" id="autoSite" />
+        <span>总是翻译 <b id="host"></b></span>
+      </label>
+
+      <div id="unsupported" class="unsupported" hidden>当前页面不支持翻译（如浏览器内置页面、扩展商店页面）。</div>
+    </main>
+
+    <footer>
+      <span id="shortcut"></span>
+      <a id="shortcutLink">修改快捷键</a>
+    </footer>
+
+    <script src="../shared/languages.js"></script>
+    <script src="../shared/config.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
