@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI 网页翻译 - 设置</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1><img src="../../icons/icon48.png" alt="" />AI 网页翻译 · 设置</h1>
+
+      <!-- 模型配置 -->
+      <section>
+        <h2>模型配置</h2>
+        <p class="hint">
+          支持 OpenAI 兼容协议（DeepSeek、OpenAI、通义千问、Kimi、智谱、Ollama 等）和 Anthropic 协议（Claude、DeepSeek 的 Anthropic 接口等）。
+          API Key 只保存在本机浏览器中，不会同步，网页也无法读取。
+        </p>
+        <div class="providers">
+          <aside>
+            <ul id="providerList"></ul>
+            <div class="add-row">
+              <select id="presetSelect"></select>
+              <button id="addProvider">新增</button>
+            </div>
+          </aside>
+          <form id="providerForm" autocomplete="off">
+            <div class="grid">
+              <label>名称<input name="name" required placeholder="例如：DeepSeek" /></label>
+              <label
+                >接口协议
+                <select name="protocol">
+                  <option value="openai">OpenAI 兼容（/chat/completions）</option>
+                  <option value="anthropic">Anthropic 兼容（/v1/messages）</option>
+                </select>
+              </label>
+              <label class="full"
+                >接口地址（Base URL）
+                <input name="baseURL" placeholder="https://api.deepseek.com" />
+                <small id="endpointPreview" class="muted"></small>
+              </label>
+              <label class="full"
+                >API Key
+                <div class="inline">
+                  <input name="apiKey" type="password" placeholder="sk-..." />
+                  <button type="button" id="toggleKey" class="ghost">显示</button>
+                </div>
+              </label>
+              <label>模型名称<input name="model" placeholder="deepseek-chat" /></label>
+              <label
+                >Temperature（可留空）
+                <input name="temperature" type="number" step="0.1" min="0" max="2" placeholder="留空使用服务商默认值" />
+              </label>
+              <label
+                >最大输出 tokens（Anthropic 协议必填）
+                <input name="maxTokens" type="number" min="256" step="256" placeholder="8192" />
+              </label>
+              <label class="full"
+                >额外请求参数（JSON，可留空）
+                <textarea
+                  name="extraBody"
+                  rows="3"
+                  placeholder='会合并到请求体中，例如：{"thinking":{"type":"disabled"}} 或 {"output_config":{"effort":"low"}}'
+                ></textarea>
+              </label>
+            </div>
+            <div class="actions">
+              <button type="submit" class="primary">保存</button>
+              <button type="button" id="testProvider">测试连接</button>
+              <button type="button" id="useProvider">设为当前使用</button>
+              <span class="spacer"></span>
+              <button type="button" id="deleteProvider" class="danger">删除</button>
+            </div>
+            <div id="testResult" class="result" hidden></div>
+          </form>
+        </div>
+      </section>
+
+      <!-- 翻译设置 -->
+      <section>
+        <h2>翻译与显示</h2>
+        <div class="grid">
+          <label
+            >默认译文语言
+            <select data-setting="targetLang" id="targetLang"></select>
+          </label>
+          <label
+            >显示方式
+            <select data-setting="displayMode">
+              <option value="bilingual">双语对照（原文 + 译文）</option>
+              <option value="replace">仅显示译文（替换原文）</option>
+            </select>
+          </label>
+          <label
+            >译文样式（双语模式）
+            <select data-setting="transStyle">
+              <option value="faded">浅色文字</option>
+              <option value="plain">与原文一致</option>
+              <option value="dashed">虚线下划线</option>
+              <option value="highlight">背景高亮</option>
+            </select>
+          </label>
+          <label
+            >划词翻译
+            <select data-setting="selectionMode">
+              <option value="icon">选中文字后显示翻译图标</option>
+              <option value="direct">选中文字后直接翻译</option>
+              <option value="off">关闭</option>
+            </select>
+          </label>
+          <label class="check full"><input type="checkbox" data-setting="floatingBall" />在页面右侧显示悬浮翻译按钮</label>
+          <label class="full"
+            >额外翻译要求（可选，会附加到提示词中）
+            <textarea
+              data-setting="customPrompt"
+              rows="3"
+              placeholder="例如：游戏相关网页，“ガチャ”统一译为“抽卡”；语气口语化一些。"
+            ></textarea>
+          </label>
+        </div>
+        <p class="hint">
+          快捷键：<b id="shortcuts"></b>，可在 <a id="shortcutLink">chrome://extensions/shortcuts</a> 修改。
+        </p>
+      </section>
+
+      <!-- 自动翻译 -->
+      <section>
+        <h2>自动翻译的网站</h2>
+        <p class="hint">打开这些网站时自动翻译（页面语言与译文语言相同时不会触发）。也可以在工具栏弹窗中勾选“总是翻译此网站”。</p>
+        <ul id="siteList" class="sites"></ul>
+        <div class="inline">
+          <input id="siteInput" placeholder="输入域名，例如 www.example.jp" />
+          <button id="addSite">添加</button>
+        </div>
+      </section>
+
+      <!-- 高级 -->
+      <section>
+        <h2>高级</h2>
+        <div class="grid">
+          <label>每次请求最多字符数<input type="number" min="200" step="100" data-setting="batchChars" /></label>
+          <label>每次请求最多段落数<input type="number" min="1" max="100" data-setting="batchItems" /></label>
+          <label>同时进行的请求数<input type="number" min="1" max="10" data-setting="concurrency" /></label>
+          <label>提前翻译视口外的距离（像素）<input type="number" min="0" step="100" data-setting="rootMargin" /></label>
+        </div>
+        <p class="hint">请求越大越省请求次数，但单次等待更久；遇到“请求过于频繁”时可调小并发数。</p>
+      </section>
+
+      <div id="savedTip" class="saved-tip" hidden>已保存</div>
+    </div>
+
+    <script src="../shared/languages.js"></script>
+    <script src="../shared/config.js"></script>
+    <script src="../background/llm.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

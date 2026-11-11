@@ -1,0 +1,324 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fb;
+  color: #1f2937;
+  font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+
+h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  margin: 0 0 20px;
+}
+
+h1 img {
+  width: 32px;
+  height: 32px;
+}
+
+section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+h2 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.hint {
+  color: #64748b;
+  font-size: 13px;
+  margin: 4px 0 14px;
+}
+
+.muted {
+  color: #94a3b8;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+a {
+  color: #4f46e5;
+  cursor: pointer;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 18px;
+}
+
+.grid .full {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: #475569;
+}
+
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: #1f2937;
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #fff;
+  width: 100%;
+}
+
+input[type='checkbox'] {
+  width: auto;
+}
+
+textarea {
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+}
+
+label textarea[data-setting='customPrompt'] {
+  font-family: inherit;
+  font-size: 13px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid #c7d2fe;
+  border-color: #6366f1;
+}
+
+button {
+  font: inherit;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #1f2937;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover {
+  background: #f8fafc;
+}
+
+button.primary {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
+
+button.primary:hover {
+  background: #4338ca;
+}
+
+button.danger {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+button.danger:hover {
+  background: #fef2f2;
+}
+
+button.ghost {
+  border-color: transparent;
+  color: #64748b;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 模型配置 */
+.providers {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+}
+
+aside ul {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+aside li {
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+aside li:hover {
+  border-color: #c7d2fe;
+}
+
+aside li.selected {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+aside li .name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+aside li .tag {
+  font-size: 11px;
+  font-weight: 500;
+  background: #16a34a;
+  color: #fff;
+  padding: 0 6px;
+  border-radius: 8px;
+}
+
+aside li .meta {
+  font-size: 12px;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-row {
+  display: flex;
+  gap: 6px;
+}
+
+.add-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  align-items: center;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.result.ok {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.result.err {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.result.loading {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* 网站列表 */
+.sites {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sites li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border-radius: 14px;
+  padding: 3px 6px 3px 12px;
+  font-size: 13px;
+}
+
+.sites li button {
+  border: 0;
+  background: transparent;
+  padding: 0 6px;
+  color: #64748b;
+}
+
+.sites .empty {
+  color: #94a3b8;
+  background: transparent;
+  padding: 0;
+}
+
+.saved-tip {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .providers,
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
