@@ -22,15 +22,34 @@
   // ======================= 模型配置 =======================
   for (const preset of C.PROVIDER_PRESETS) $('presetSelect').add(new Option(preset.label, preset.key));
 
+  const AVATAR_COLORS = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#db2777', '#7c3aed', '#2563eb', '#dc2626'];
+  /** 用名称首字母 + 固定配色生成头像，便于在列表中区分 */
+  function paintAvatar(el, name) {
+    const text = (name || '?').trim() || '?';
+    let h = 0;
+    for (const ch of text) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+    el.textContent = Array.from(text)[0].toUpperCase();
+    el.style.background = AVATAR_COLORS[h % AVATAR_COLORS.length];
+  }
+
+  const protocolLabel = (p) => (p.protocol === 'anthropic' ? 'Anthropic' : 'OpenAI');
+
   function renderProviderList() {
     const ul = $('providerList');
     ul.innerHTML = '';
     for (const p of providers) {
       const li = document.createElement('li');
       li.className = p.id === selectedId ? 'selected' : '';
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      paintAvatar(avatar, p.name);
+      const info = document.createElement('div');
+      info.className = 'info';
       const name = document.createElement('div');
       name.className = 'name';
-      name.textContent = p.name || '未命名';
+      const nameText = document.createElement('span');
+      nameText.textContent = p.name || '未命名';
+      name.appendChild(nameText);
       if (p.id === settings.activeProviderId) {
         const tag = document.createElement('span');
         tag.className = 'tag';
@@ -39,11 +58,43 @@
       }
       const meta = document.createElement('div');
       meta.className = 'meta';
-      meta.textContent = `${p.protocol === 'anthropic' ? 'Anthropic' : 'OpenAI'} · ${p.model || '未填模型'}${p.apiKey ? '' : ' · 未填 Key'}`;
-      li.append(name, meta);
+      const metaText = document.createElement('span');
+      metaText.textContent = `${protocolLabel(p)} · ${p.model || '未填模型'}`;
+      meta.appendChild(metaText);
+      if (!p.apiKey) {
+        const warn = document.createElement('span');
+        warn.className = 'warn';
+        warn.textContent = '\u00a0· 未填 Key';
+        meta.appendChild(warn);
+      }
+      info.append(name, meta);
+      li.append(avatar, info);
+      li.title = p.name || '未命名';
       li.addEventListener('click', () => selectProvider(p.id));
       ul.appendChild(li);
     }
+  }
+
+  /** 表单顶部：头像、名称、协议与模型 */
+  function renderFormHead() {
+    const name = form.elements.name.value.trim() || '未命名';
+    const model = form.elements.model.value.trim();
+    paintAvatar($('formAvatar'), name);
+    $('formTitle').textContent = name;
+    $('formSub').textContent = `${protocolLabel({ protocol: form.elements.protocol.value })} 协议 · ${model || '未填模型'}`;
+  }
+
+  function updateUseButton() {
+    const active = selectedId === settings.activeProviderId;
+    const btn = $('useProvider');
+    btn.disabled = active;
+    btn.textContent = active ? '✓ 当前使用中' : '设为当前使用';
+    btn.classList.toggle('is-active', active);
+  }
+
+  function setDirty(v) {
+    dirty = v;
+    $('dirtyTip').hidden = !v;
   }
 
   function fillForm(p) {
@@ -53,10 +104,13 @@
     form.elements.apiKey.type = 'password';
     $('toggleKey').textContent = '显示';
     $('testResult').hidden = true;
-    $('useProvider').disabled = p.id === settings.activeProviderId;
+    $('extraDetails').open = !!(p.extraBody && String(p.extraBody).trim());
+    updateUseButton();
     $('deleteProvider').disabled = providers.length <= 1;
+    $('deleteProvider').title = providers.length <= 1 ? '至少需要保留一个模型配置' : '';
     updateEndpointPreview();
-    dirty = false;
+    renderFormHead();
+    setDirty(false);
   }
 
   function readForm() {
@@ -106,18 +160,22 @@
   }
 
   form.addEventListener('input', (e) => {
-    dirty = true;
+    setDirty(true);
     if (e.target.name === 'baseURL' || e.target.name === 'protocol') updateEndpointPreview();
+    if (['name', 'model', 'protocol'].includes(e.target.name)) renderFormHead();
   });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const p = readForm();
     const err = validateExtraBody(p.extraBody);
-    if (err) return showResult('err', err);
+    if (err) {
+      $('extraDetails').open = true;
+      return showResult('err', err);
+    }
     providers = providers.map((x) => (x.id === selectedId ? p : x));
     await C.saveProviders(providers);
-    dirty = false;
+    setDirty(false);
     renderProviderList();
     showSaved();
   });
@@ -160,7 +218,7 @@
 
   $('useProvider').addEventListener('click', async () => {
     settings = await C.saveSettings({ activeProviderId: selectedId });
-    $('useProvider').disabled = true;
+    updateUseButton();
     renderProviderList();
     showSaved('已设为当前使用');
   });
@@ -287,7 +345,7 @@
         renderSettings();
         renderSites();
         renderProviderList();
-        $('useProvider').disabled = selectedId === settings.activeProviderId;
+        updateUseButton();
       });
     }
   });
@@ -295,13 +353,35 @@
   // ======================= 快捷键 =======================
   chrome.commands.getAll((cmds) => {
     const names = { 'toggle-translate': '翻译/还原', 'toggle-mode': '切换显示方式' };
-    $('shortcuts').textContent =
-      cmds
-        .filter((c) => names[c.name])
-        .map((c) => `${c.shortcut || '未设置'} ${names[c.name]}`)
-        .join('；') || '未设置';
+    const box = $('shortcuts');
+    box.innerHTML = '';
+    const list = cmds.filter((c) => names[c.name]);
+    if (!list.length) box.textContent = '未设置';
+    for (const c of list) {
+      const item = document.createElement('span');
+      item.className = 'item';
+      const kbd = document.createElement('kbd');
+      kbd.textContent = c.shortcut || '未设置';
+      item.append(kbd, names[c.name]);
+      box.appendChild(item);
+    }
   });
   $('shortcutLink').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
+
+  // ======================= 左侧导航高亮 =======================
+  const navLinks = Array.from(document.querySelectorAll('#nav a'));
+  const sections = navLinks.map((a) => document.querySelector(a.getAttribute('href')));
+  function updateNav() {
+    let idx = 0;
+    sections.forEach((sec, i) => {
+      if (sec.getBoundingClientRect().top <= 120) idx = i;
+    });
+    // 滚动到底部时高亮最后一项
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) idx = sections.length - 1;
+    navLinks.forEach((a, i) => a.classList.toggle('active', i === idx));
+  }
+  window.addEventListener('scroll', updateNav, { passive: true });
+  updateNav();
 
   window.addEventListener('beforeunload', (e) => {
     if (dirty) e.preventDefault();

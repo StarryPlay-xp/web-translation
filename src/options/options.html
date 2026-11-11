@@ -2,152 +2,299 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AI 网页翻译 - 设置</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <div class="container">
-      <h1><img src="../../icons/icon48.png" alt="" />AI 网页翻译 · 设置</h1>
+    <div class="layout">
+      <!-- 左侧导航 -->
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="../../icons/icon48.png" alt="" />
+          <div>
+            <div class="brand-name">AI 网页翻译</div>
+            <div class="brand-sub">扩展设置</div>
+          </div>
+        </div>
+        <nav class="nav" id="nav">
+          <a href="#model" class="active">
+            <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7l-9-5Zm0 2.3L18.7 8 12 11.7 5.3 8 12 4.3ZM5 9.7l6 3.3v6.6l-6-3.3V9.7Zm8 9.9V13l6-3.3v6.6l-6 3.3Z" /></svg>
+            模型配置
+          </a>
+          <a href="#display">
+            <svg viewBox="0 0 24 24"><path d="M12.9 15.1 10.4 12.6l.1-.1A17 17 0 0 0 14.1 6H17V4h-7V2H8v2H1v2h11.2A15.8 15.8 0 0 1 9 11.4 15.6 15.6 0 0 1 6.7 8h-2a17.6 17.6 0 0 0 3 4.6L2.6 17.6 4 19l5-5 3.1 3.1.8-2ZM18.5 10h-2L12 22h2l1.1-3h4.8l1.1 3h2l-4.5-12Zm-2.6 7 1.6-4.3 1.6 4.3h-3.2Z" /></svg>
+            翻译与显示
+          </a>
+          <a href="#sites">
+            <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm6.9 6h-2.9a15.7 15.7 0 0 0-1.4-3.6A8 8 0 0 1 18.9 8ZM12 4a14 14 0 0 1 1.9 4h-3.8A14 14 0 0 1 12 4ZM4.3 14a8.2 8.2 0 0 1 0-4h3.4a16.5 16.5 0 0 0 0 4H4.3Zm.8 2h3a15.7 15.7 0 0 0 1.4 3.6A8 8 0 0 1 5.1 16ZM8 8H5.1a8 8 0 0 1 4.3-3.6A15.7 15.7 0 0 0 8 8Zm4 12a14 14 0 0 1-1.9-4h3.8A14 14 0 0 1 12 20Zm2.3-6H9.7a14.7 14.7 0 0 1 0-4h4.6a14.7 14.7 0 0 1 0 4Zm.3 5.6a15.7 15.7 0 0 0 1.4-3.6h3a8 8 0 0 1-4.4 3.6Zm1.7-5.6a16.5 16.5 0 0 0 0-4h3.4a8.2 8.2 0 0 1 0 4h-3.4Z" /></svg>
+            自动翻译网站
+          </a>
+          <a href="#advanced">
+            <svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3ZM3 5v2h10V5H3Zm10 16v-2h8v-2h-8v-2h-2v6h2ZM7 9v2H3v2h4v2h2V9H7Zm14 4v-2H11v2h10Zm-6-4h2V7h4V5h-4V3h-2v6Z" /></svg>
+            高级
+          </a>
+        </nav>
+        <div class="sidebar-foot">修改普通设置会自动保存；模型配置需点击“保存”。</div>
+      </aside>
 
-      <!-- 模型配置 -->
-      <section>
-        <h2>模型配置</h2>
-        <p class="hint">
-          支持 OpenAI 兼容协议（DeepSeek、OpenAI、通义千问、Kimi、智谱、Ollama 等）和 Anthropic 协议（Claude、DeepSeek 的 Anthropic 接口等）。
-          API Key 只保存在本机浏览器中，不会同步，网页也无法读取。
-        </p>
-        <div class="providers">
-          <aside>
-            <ul id="providerList"></ul>
-            <div class="add-row">
-              <select id="presetSelect"></select>
-              <button id="addProvider">新增</button>
+      <main class="content">
+        <!-- 模型配置 -->
+        <section id="model" class="card">
+          <header class="card-head">
+            <h2>模型配置</h2>
+            <p class="desc">
+              支持 OpenAI 兼容协议（DeepSeek、OpenAI、通义千问、Kimi、智谱、Ollama 等）和 Anthropic 协议（Claude、DeepSeek 的 Anthropic 接口等）。
+            </p>
+          </header>
+          <div class="notice">
+            <svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5l-9-4Zm0 6a3 3 0 0 1 3 3v1h1v6H8v-6h1v-1a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v1h2v-1a1 1 0 0 0-1-1Z" /></svg>
+            API Key 只保存在本机浏览器中，不会同步到其他设备，网页也无法读取。
+          </div>
+
+          <div class="providers">
+            <div class="provider-side">
+              <div class="side-title">已添加的模型</div>
+              <ul id="providerList" class="provider-list"></ul>
+              <div class="add-box">
+                <div class="side-title">从模板新增</div>
+                <select id="presetSelect"></select>
+                <button id="addProvider" class="add-btn">
+                  <svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" /></svg>
+                  新增模型
+                </button>
+              </div>
             </div>
-          </aside>
-          <form id="providerForm" autocomplete="off">
-            <div class="grid">
-              <label>名称<input name="name" required placeholder="例如：DeepSeek" /></label>
-              <label
-                >接口协议
-                <select name="protocol">
-                  <option value="openai">OpenAI 兼容（/chat/completions）</option>
-                  <option value="anthropic">Anthropic 兼容（/v1/messages）</option>
-                </select>
-              </label>
-              <label class="full"
-                >接口地址（Base URL）
-                <input name="baseURL" placeholder="https://api.deepseek.com" />
-                <small id="endpointPreview" class="muted"></small>
-              </label>
-              <label class="full"
-                >API Key
-                <div class="inline">
-                  <input name="apiKey" type="password" placeholder="sk-..." />
-                  <button type="button" id="toggleKey" class="ghost">显示</button>
+
+            <form id="providerForm" class="provider-form" autocomplete="off">
+              <div class="form-head">
+                <div id="formAvatar" class="avatar lg"></div>
+                <div class="form-title">
+                  <h3 id="formTitle"></h3>
+                  <div id="formSub" class="form-sub"></div>
                 </div>
-              </label>
-              <label>模型名称<input name="model" placeholder="deepseek-chat" /></label>
-              <label
-                >Temperature（可留空）
-                <input name="temperature" type="number" step="0.1" min="0" max="2" placeholder="留空使用服务商默认值" />
-              </label>
-              <label
-                >最大输出 tokens（Anthropic 协议必填）
-                <input name="maxTokens" type="number" min="256" step="256" placeholder="8192" />
-              </label>
-              <label class="full"
-                >额外请求参数（JSON，可留空）
-                <textarea
-                  name="extraBody"
-                  rows="3"
-                  placeholder='会合并到请求体中，例如：{"thinking":{"type":"disabled"}} 或 {"output_config":{"effort":"low"}}'
-                ></textarea>
-              </label>
+                <button type="button" id="useProvider" class="use-btn">设为当前使用</button>
+              </div>
+
+              <div class="form-body">
+                <div class="group">
+                  <div class="group-title">基本信息</div>
+                  <div class="grid">
+                    <label class="field">
+                      <span class="field-label">名称</span>
+                      <input name="name" required placeholder="例如：DeepSeek" />
+                    </label>
+                    <div class="field">
+                      <span class="field-label">接口协议</span>
+                      <div class="segmented" role="radiogroup">
+                        <label>
+                          <input type="radio" name="protocol" value="openai" />
+                          <span title="/chat/completions">OpenAI 兼容</span>
+                        </label>
+                        <label>
+                          <input type="radio" name="protocol" value="anthropic" />
+                          <span title="/v1/messages">Anthropic 兼容</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="group">
+                  <div class="group-title">连接</div>
+                  <div class="grid">
+                    <label class="field full">
+                      <span class="field-label">接口地址（Base URL）</span>
+                      <input name="baseURL" placeholder="https://api.deepseek.com" />
+                      <small id="endpointPreview" class="endpoint"></small>
+                    </label>
+                    <label class="field full">
+                      <span class="field-label">API Key</span>
+                      <span class="input-group">
+                        <input name="apiKey" type="password" placeholder="sk-..." spellcheck="false" />
+                        <button type="button" id="toggleKey" class="addon">显示</button>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="group">
+                  <div class="group-title">模型参数</div>
+                  <div class="grid cols-3">
+                    <label class="field">
+                      <span class="field-label">模型名称</span>
+                      <input name="model" placeholder="deepseek-chat" spellcheck="false" />
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Temperature</span>
+                      <input name="temperature" type="number" step="0.1" min="0" max="2" placeholder="默认" />
+                      <small class="help">0 ~ 2，留空用默认值</small>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">最大输出 tokens</span>
+                      <input name="maxTokens" type="number" min="256" step="256" placeholder="8192" />
+                      <small class="help">Anthropic 协议必填</small>
+                    </label>
+                  </div>
+                </div>
+
+                <details id="extraDetails" class="group more">
+                  <summary class="group-title">额外请求参数（可选）</summary>
+                  <label class="field">
+                    <textarea
+                      name="extraBody"
+                      rows="3"
+                      spellcheck="false"
+                      placeholder='JSON 对象，会合并到请求体中，例如：{"thinking":{"type":"disabled"}} 或 {"output_config":{"effort":"low"}}'
+                    ></textarea>
+                  </label>
+                </details>
+
+                <div id="testResult" class="result" hidden></div>
+              </div>
+
+              <div class="form-foot">
+                <button type="submit" class="primary">保存</button>
+                <button type="button" id="testProvider">测试连接</button>
+                <span id="dirtyTip" class="dirty-tip" hidden>有未保存的修改</span>
+                <span class="spacer"></span>
+                <button type="button" id="deleteProvider" class="danger">删除</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- 翻译设置 -->
+        <section id="display" class="card">
+          <header class="card-head">
+            <h2>翻译与显示</h2>
+          </header>
+          <div class="rows">
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">默认译文语言</span>
+                <span class="row-desc">翻译网页时译成的语言</span>
+              </span>
+              <select data-setting="targetLang" id="targetLang"></select>
+            </label>
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">显示方式</span>
+                <span class="row-desc">保留原文对照，或直接替换为译文</span>
+              </span>
+              <select data-setting="displayMode">
+                <option value="bilingual">双语对照（原文 + 译文）</option>
+                <option value="replace">仅显示译文（替换原文）</option>
+              </select>
+            </label>
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">译文样式</span>
+                <span class="row-desc">仅在双语对照模式下生效</span>
+              </span>
+              <select data-setting="transStyle">
+                <option value="faded">浅色文字</option>
+                <option value="plain">与原文一致</option>
+                <option value="dashed">虚线下划线</option>
+                <option value="highlight">背景高亮</option>
+              </select>
+            </label>
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">划词翻译</span>
+                <span class="row-desc">选中网页文字时的行为</span>
+              </span>
+              <select data-setting="selectionMode">
+                <option value="icon">选中文字后显示翻译图标</option>
+                <option value="direct">选中文字后直接翻译</option>
+                <option value="off">关闭</option>
+              </select>
+            </label>
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">悬浮翻译按钮</span>
+                <span class="row-desc">在页面右侧显示悬浮翻译按钮</span>
+              </span>
+              <span class="switch">
+                <input type="checkbox" data-setting="floatingBall" />
+                <span class="slider"></span>
+              </span>
+            </label>
+            <label class="row stack">
+              <span class="row-text">
+                <span class="row-title">额外翻译要求</span>
+                <span class="row-desc">可选，会附加到提示词中，适合写术语表或语气要求</span>
+              </span>
+              <textarea
+                data-setting="customPrompt"
+                rows="3"
+                placeholder="例如：游戏相关网页，“ガチャ”统一译为“抽卡”；语气口语化一些。"
+              ></textarea>
+            </label>
+            <div class="row">
+              <span class="row-text">
+                <span class="row-title">快捷键</span>
+                <span class="row-desc">可在 <a id="shortcutLink">chrome://extensions/shortcuts</a> 修改</span>
+              </span>
+              <span id="shortcuts" class="shortcuts"></span>
             </div>
-            <div class="actions">
-              <button type="submit" class="primary">保存</button>
-              <button type="button" id="testProvider">测试连接</button>
-              <button type="button" id="useProvider">设为当前使用</button>
-              <span class="spacer"></span>
-              <button type="button" id="deleteProvider" class="danger">删除</button>
-            </div>
-            <div id="testResult" class="result" hidden></div>
-          </form>
-        </div>
-      </section>
+          </div>
+        </section>
 
-      <!-- 翻译设置 -->
-      <section>
-        <h2>翻译与显示</h2>
-        <div class="grid">
-          <label
-            >默认译文语言
-            <select data-setting="targetLang" id="targetLang"></select>
-          </label>
-          <label
-            >显示方式
-            <select data-setting="displayMode">
-              <option value="bilingual">双语对照（原文 + 译文）</option>
-              <option value="replace">仅显示译文（替换原文）</option>
-            </select>
-          </label>
-          <label
-            >译文样式（双语模式）
-            <select data-setting="transStyle">
-              <option value="faded">浅色文字</option>
-              <option value="plain">与原文一致</option>
-              <option value="dashed">虚线下划线</option>
-              <option value="highlight">背景高亮</option>
-            </select>
-          </label>
-          <label
-            >划词翻译
-            <select data-setting="selectionMode">
-              <option value="icon">选中文字后显示翻译图标</option>
-              <option value="direct">选中文字后直接翻译</option>
-              <option value="off">关闭</option>
-            </select>
-          </label>
-          <label class="check full"><input type="checkbox" data-setting="floatingBall" />在页面右侧显示悬浮翻译按钮</label>
-          <label class="full"
-            >额外翻译要求（可选，会附加到提示词中）
-            <textarea
-              data-setting="customPrompt"
-              rows="3"
-              placeholder="例如：游戏相关网页，“ガチャ”统一译为“抽卡”；语气口语化一些。"
-            ></textarea>
-          </label>
-        </div>
-        <p class="hint">
-          快捷键：<b id="shortcuts"></b>，可在 <a id="shortcutLink">chrome://extensions/shortcuts</a> 修改。
-        </p>
-      </section>
+        <!-- 自动翻译 -->
+        <section id="sites" class="card">
+          <header class="card-head">
+            <h2>自动翻译的网站</h2>
+            <p class="desc">打开这些网站时自动翻译（页面语言与译文语言相同时不会触发）。也可以在工具栏弹窗中勾选“总是翻译此网站”。</p>
+          </header>
+          <div class="site-add">
+            <input id="siteInput" placeholder="输入域名，例如 www.example.jp" />
+            <button id="addSite" class="primary">添加</button>
+          </div>
+          <ul id="siteList" class="sites"></ul>
+        </section>
 
-      <!-- 自动翻译 -->
-      <section>
-        <h2>自动翻译的网站</h2>
-        <p class="hint">打开这些网站时自动翻译（页面语言与译文语言相同时不会触发）。也可以在工具栏弹窗中勾选“总是翻译此网站”。</p>
-        <ul id="siteList" class="sites"></ul>
-        <div class="inline">
-          <input id="siteInput" placeholder="输入域名，例如 www.example.jp" />
-          <button id="addSite">添加</button>
-        </div>
-      </section>
-
-      <!-- 高级 -->
-      <section>
-        <h2>高级</h2>
-        <div class="grid">
-          <label>每次请求最多字符数<input type="number" min="200" step="100" data-setting="batchChars" /></label>
-          <label>每次请求最多段落数<input type="number" min="1" max="100" data-setting="batchItems" /></label>
-          <label>同时进行的请求数<input type="number" min="1" max="10" data-setting="concurrency" /></label>
-          <label>提前翻译视口外的距离（像素）<input type="number" min="0" step="100" data-setting="rootMargin" /></label>
-        </div>
-        <p class="hint">请求越大越省请求次数，但单次等待更久；遇到“请求过于频繁”时可调小并发数。</p>
-      </section>
-
-      <div id="savedTip" class="saved-tip" hidden>已保存</div>
+        <!-- 高级 -->
+        <section id="advanced" class="card">
+          <header class="card-head">
+            <h2>高级</h2>
+            <p class="desc">请求越大越省请求次数，但单次等待更久；遇到“请求过于频繁”时可调小并发数。</p>
+          </header>
+          <div class="rows">
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">每次请求最多字符数</span>
+                <span class="row-desc">单个请求中合并的文本总长度上限</span>
+              </span>
+              <input type="number" min="200" step="100" data-setting="batchChars" class="num" />
+            </label>
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">每次请求最多段落数</span>
+                <span class="row-desc">1 ~ 100</span>
+              </span>
+              <input type="number" min="1" max="100" data-setting="batchItems" class="num" />
+            </label>
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">同时进行的请求数</span>
+                <span class="row-desc">1 ~ 10，数值越大越快，但更容易被限流</span>
+              </span>
+              <input type="number" min="1" max="10" data-setting="concurrency" class="num" />
+            </label>
+            <label class="row">
+              <span class="row-text">
+                <span class="row-title">提前翻译的距离（像素）</span>
+                <span class="row-desc">提前翻译视口外这段距离内的内容，滚动时更流畅</span>
+              </span>
+              <input type="number" min="0" step="100" data-setting="rootMargin" class="num" />
+            </label>
+          </div>
+        </section>
+      </main>
     </div>
+
+    <div id="savedTip" class="saved-tip" hidden>已保存</div>
 
     <script src="../shared/languages.js"></script>
     <script src="../shared/config.js"></script>
