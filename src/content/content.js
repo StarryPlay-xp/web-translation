@@ -17,6 +17,8 @@
   const TAG_RE = /<\/?g\d+>/g;
   const INLINE_MAX_CHARS = 40; // 短文本译文跟在原文后面（同一行），长文本另起一行
   const LANG_CHECK_MIN_CHARS = 24; // 段落足够长时才检测是否已是目标语言
+  const MIN_BATCH_CHARS = 400; // 屏幕内容拆给多个请求并行翻译时，每个请求至少包含的字符数
+  const PORT_NAME = 'wt-translate';
 
   // ======================= 状态 =======================
   let S = Object.assign({}, C.DEFAULT_SETTINGS); // 当前设置
@@ -25,7 +27,6 @@
     session: 0, // 每次开启翻译 +1，用于丢弃过期的返回结果
     detectedLang: 'auto',
     sourceOverride: null, // 用户在弹窗中手动指定的源语言（仅当前页面）
-    pending: 0,
     lastError: ''
   };
   let processed = new WeakSet(); // 已建组的文本节点
@@ -33,9 +34,10 @@
   let blockGroups = new Map(); // block 元素 → 段落组数组
   let io = null; // IntersectionObserver
   let mo = null; // MutationObserver
-  let queue = [];
-  let flushTimer = null;
-  const inflight = new Map(); // cacheKey → 等待结果的组数组
+  let queue = []; // 等待发送的段落组（发送前按离屏幕的远近排序）
+  let pumpTimer = null;
+  const activeReqs = new Set(); // 进行中的请求（可取消）
+  const inflight = new Map(); // cacheKey → { groups: 等待结果的组数组, text: 已收到的译文 }
   const pageCache = new Map(); // cacheKey → 译文（页面生命周期内有效）
   let displayCache = new WeakMap();
 
@@ -69,6 +71,8 @@
     return el || document.body;
   }
 
+  const INVALIDATED = { ok: false, error: '插件已更新或被禁用，请刷新页面后重试', invalidated: true };
+
   function sendMessage(msg) {
     return new Promise((resolve) => {
       try {
@@ -78,9 +82,48 @@
           } else resolve(resp || { ok: false, error: '后台无响应' });
         });
       } catch (e) {
-        resolve({ ok: false, error: '插件已更新或被禁用，请刷新页面后重试', invalidated: true });
+        resolve(INVALIDATED);
       }
     });
+  }
+
+  /**
+   * 通过长连接向后台请求翻译，每译好一段就回调 onItem(index, text)，
+   * 正在输出时回调 onPartial(index, 已输出部分)（需要 payload.partial = true）。
+   * 返回 { promise, cancel }：promise 结果为 { ok, translations } 或 { ok: false, error }；
+   * cancel() 会断开连接，后台随即中止对模型的请求、释放并发名额。
+   */
+  function streamTranslate(payload, { onItem, onPartial } = {}) {
+    let port = null;
+    let settled = false;
+    let settle;
+    const promise = new Promise((r) => (settle = r));
+    const finish = (resp) => {
+      if (settled) return;
+      settled = true;
+      settle(resp);
+      try {
+        if (port) port.disconnect();
+      } catch (_) {}
+    };
+    try {
+      port = chrome.runtime.connect({ name: PORT_NAME });
+      port.onMessage.addListener((m) => {
+        if (settled || !m) return;
+        if (m.type === 'item') onItem && onItem(m.index, m.text);
+        else if (m.type === 'partial') onPartial && onPartial(m.index, m.text);
+        else if (m.type === 'done') finish({ ok: true, translations: m.translations });
+        else if (m.type === 'error') finish({ ok: false, error: m.error, detail: m.detail, status: m.status });
+      });
+      port.onDisconnect.addListener(() => {
+        void chrome.runtime.lastError;
+        finish({ ok: false, error: '与插件后台的连接中断，请重试' });
+      });
+      port.postMessage(Object.assign({ type: 'translate' }, payload));
+    } catch (e) {
+      finish(INVALIDATED);
+    }
+    return { promise, cancel: () => finish({ ok: false, cancelled: true }) };
   }
 
   async function detectLang(text) {
@@ -195,6 +238,14 @@
   }
 
   // ======================= 批量请求 =======================
+  /**
+   * 调度策略：
+   *  1. 段落先进入页面内的队列，只有在“同时进行的请求数”还有空位时才发出；
+   *  2. 每次发送前按离当前屏幕的远近排序，屏幕内的按从上到下，保证先翻译正在看的内容；
+   *  3. 屏幕内的内容平均分给空闲的请求并行翻译，整屏更快出齐；
+   *  4. 快速滚动时已经滚远（或被隐藏）的段落退回观察，重新接近屏幕时再翻译，不占用请求名额；
+   *  5. 后台流式返回，每译好一段立即显示。
+   */
   function enqueue(g) {
     g.status = 'queued';
     g.error = '';
@@ -205,74 +256,206 @@
     }
     showLoading(g);
     queue.push(g);
-    state.pending++;
     updateBall();
-    if (!flushTimer) flushTimer = setTimeout(flush, 80);
+    schedulePump(80); // 稍等片刻，把同一时间进入屏幕的段落合并发送
   }
 
-  function flush() {
-    flushTimer = null;
-    const items = queue.splice(0);
-    const unique = []; // 本次需要请求的去重文本
-    for (const g of items) {
+  function schedulePump(delay) {
+    if (!pumpTimer) pumpTimer = setTimeout(pump, delay);
+  }
+
+  // 快速滚动时先不发请求，停下（或放慢）后按最终位置调度，避免为一闪而过的内容发请求；
+  // 停下时也会重新调度一次，让新位置的内容能抢到被远处请求占用的名额
+  const SCROLL_SETTLE_MS = 150;
+  const FAST_SCROLL_PX_PER_MS = 1.5; // 约每秒 1500 像素，正常阅读时的滚动远低于此
+  const scrollState = { target: null, y: 0, at: 0, fast: false };
+  function onScroll(e) {
+    const el = e.target && e.target.nodeType === Node.ELEMENT_NODE ? e.target : document.scrollingElement;
+    if (!el) return;
+    const t = performance.now();
+    const y = el.scrollTop;
+    const dt = t - scrollState.at;
+    scrollState.fast = scrollState.target === el && dt < 200 && Math.abs(y - scrollState.y) / Math.max(1, dt) > FAST_SCROLL_PX_PER_MS;
+    scrollState.target = el;
+    scrollState.y = y;
+    scrollState.at = t;
+    if (state.enabled && queue.length) schedulePump(SCROLL_SETTLE_MS);
+  }
+  document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+
+  /** 还在等待译文的段落数（用于悬浮按钮的加载动画） */
+  function pendingCount() {
+    let n = queue.length;
+    for (const entry of inflight.values()) if (entry.text === undefined) n += entry.groups.length;
+    return n;
+  }
+
+  /** 退回“未翻译”状态，等它再次接近屏幕时由 IntersectionObserver 重新触发 */
+  function demote(g) {
+    g.status = 'idle';
+    removeMarker(g);
+    if (io && g.block.isConnected) io.observe(g.block);
+  }
+
+  /** 返回测量函数：段落离屏幕的距离（像素，屏幕内为 0；被隐藏时为 Infinity），同一次调度内按 block 缓存 */
+  function viewportMeter() {
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const rects = new Map();
+    return (g) => {
+      let r = rects.get(g.block);
+      if (!r) {
+        r = g.block.getBoundingClientRect();
+        rects.set(g.block, r);
+      }
+      g.top = r.top;
+      if (r.width === 0 && r.height === 0) return Infinity;
+      return r.bottom < 0 ? -r.bottom : r.top > vh ? r.top - vh : 0;
+    };
+  }
+
+  /**
+   * 屏幕内有段落在排队、但请求名额已满时（例如快速滚动到页面别处），
+   * 中止那些“还没译完的段落都已滚远”的请求，把名额让给屏幕内的内容。
+   * 已经收到的译文保留显示，未完成的段落退回观察，滚回来时再翻译。
+   */
+  function preemptFarRequests(measure, farAway) {
+    for (const req of Array.from(activeReqs)) {
+      const waiting = req.batch.map((b) => inflight.get(b.key)).filter((e) => e && e.text === undefined);
+      if (!waiting.length) continue; // 都已收到译文，马上就会结束
+      if (!waiting.every((e) => e.groups.every((g) => !isAlive(g) || measure(g) > farAway))) continue;
+      req.cancel();
+      activeReqs.delete(req);
+      for (const b of req.batch) {
+        const entry = inflight.get(b.key);
+        if (!entry) continue;
+        inflight.delete(b.key);
+        if (entry.text === undefined) entry.groups.forEach(demote);
+      }
+    }
+  }
+
+  function pump() {
+    pumpTimer = null;
+    if (!state.enabled) return;
+    if (!queue.length) return updateBall();
+    if (scrollState.fast && performance.now() - scrollState.at < SCROLL_SETTLE_MS) {
+      pumpTimer = setTimeout(pump, SCROLL_SETTLE_MS); // 还在快速滚动，稍后再看
+      return;
+    }
+    const limit = Math.max(1, Number(S.concurrency) || 4);
+
+    // 计算每个段落离屏幕的距离，顺带处理已缓存、已失效、已滚远的段落
+    const measure = viewportMeter();
+    const farAway = (window.innerHeight || 0) + (Number(S.rootMargin) || 600);
+    const kept = [];
+    for (const g of queue) {
       const key = cacheKey(g.source);
       if (pageCache.has(key)) {
-        state.pending--;
         applyTranslation(g, pageCache.get(key));
         continue;
       }
-      if (inflight.has(key)) {
-        inflight.get(key).push(g);
+      if (!isAlive(g)) {
+        g.status = 'idle';
+        removeMarker(g);
         continue;
       }
-      inflight.set(key, [g]);
-      unique.push({ key, source: g.source });
+      g.dist = measure(g);
+      if (g.dist > farAway) {
+        demote(g);
+        continue;
+      }
+      kept.push(g);
     }
+    kept.sort((a, b) => a.dist - b.dist || a.top - b.top);
+    queue = kept;
+    if (!queue.length) return updateBall();
+    if (activeReqs.size >= limit && queue[0].dist === 0) preemptFarRequests(measure, farAway);
+    if (activeReqs.size >= limit) return updateBall();
+
     const maxChars = Math.max(200, Number(S.batchChars) || 2000);
     const maxItems = Math.max(1, Number(S.batchItems) || 30);
-    let batch = [];
-    let chars = 0;
-    for (const u of unique) {
-      if (batch.length && (chars + u.source.length > maxChars || batch.length >= maxItems)) {
-        requestBatch(batch);
-        batch = [];
-        chars = 0;
+    const free = limit - activeReqs.size;
+    let visibleChars = 0;
+    for (const g of queue) if (g.dist === 0) visibleChars += g.source.length;
+    const cap = visibleChars
+      ? Math.min(maxChars, Math.max(MIN_BATCH_CHARS, Math.ceil(visibleChars / free)))
+      : maxChars;
+
+    while (activeReqs.size < limit && queue.length) {
+      const batch = [];
+      let chars = 0;
+      while (queue.length) {
+        const g = queue[0];
+        const key = cacheKey(g.source);
+        const entry = inflight.get(key);
+        if (entry) {
+          // 相同文本已在翻译中：等同一份结果
+          queue.shift();
+          entry.groups.push(g);
+          if (entry.text !== undefined) applyTranslation(g, entry.text);
+          continue;
+        }
+        // 装到 cap 为止（最后一段允许略超），保证屏幕内的内容在第一轮就全部发出；任何情况下不超过设置的上限
+        if (batch.length && (chars >= cap || chars + g.source.length > maxChars || batch.length >= maxItems)) break;
+        queue.shift();
+        inflight.set(key, { groups: [g], text: undefined });
+        batch.push({ key, source: g.source, top: g.top });
+        chars += g.source.length;
       }
-      batch.push(u);
-      chars += u.source.length;
+      // 选哪些段落按远近决定，同一批内按页面顺序排列，模型能看到连贯的上下文
+      batch.sort((a, b) => a.top - b.top);
+      if (batch.length) sendBatch(batch);
     }
-    if (batch.length) requestBatch(batch);
     updateBall();
   }
 
-  async function requestBatch(batch) {
+  function sendBatch(batch) {
     const session = state.session;
-    const resp = await sendMessage({
-      type: 'translate',
-      segments: batch.map((b) => b.source),
-      from: sourceLang(),
-      to: S.targetLang,
-      title: document.title,
-      host: location.hostname
-    });
-    // 注意：stop() 会清空 inflight，所以这里取到的等待列表一定属于当前这一轮（缓存键相同，译文同样有效）
-    batch.forEach((b, i) => {
-      const waiting = inflight.get(b.key) || [];
-      inflight.delete(b.key);
-      state.pending = Math.max(0, state.pending - waiting.length);
-      if (resp && resp.ok) {
-        const t = resp.translations[i];
-        pageCache.set(b.key, t);
-        waiting.forEach((g) => applyTranslation(g, t));
-      } else {
-        waiting.forEach((g) => markError(g, resp && resp.error));
+    const req = streamTranslate(
+      {
+        segments: batch.map((b) => b.source),
+        from: sourceLang(),
+        to: S.targetLang,
+        title: document.title,
+        host: location.hostname
+      },
+      {
+        onItem(i, text) {
+          const b = batch[i];
+          const entry = b && session === state.session && inflight.get(b.key);
+          if (!entry) return;
+          entry.text = text;
+          entry.groups.forEach((g) => applyTranslation(g, text));
+          updateBall();
+        }
       }
+    );
+    req.batch = batch;
+    activeReqs.add(req);
+    req.promise.then((resp) => {
+      activeReqs.delete(req);
+      // 被取消的请求：stop() / preemptFarRequests() 已清理相关状态
+      if (resp.cancelled || session !== state.session) return;
+      batch.forEach((b, i) => {
+        const entry = inflight.get(b.key);
+        if (!entry) return;
+        inflight.delete(b.key);
+        if (resp.ok) {
+          const t = resp.translations[i];
+          pageCache.set(b.key, t); // 只缓存最终结果，流式阶段的临时结果不缓存
+          entry.groups.forEach((g) => applyTranslation(g, t));
+        } else if (entry.text === undefined) {
+          entry.groups.forEach((g) => markError(g, resp.error));
+        }
+        // 出错但这一段已经收到过译文：保留已显示的译文
+      });
+      if (!resp.ok) {
+        state.lastError = resp.error;
+        reportError(resp);
+      }
+      updateBall();
+      schedulePump(0); // 空出了请求名额，继续发送排队中的段落
     });
-    if (resp && !resp.ok && session === state.session) {
-      state.lastError = resp.error;
-      reportError(resp);
-    }
-    updateBall();
   }
 
   // ======================= 渲染 =======================
@@ -345,6 +528,7 @@
   }
 
   function applyTranslation(g, translation) {
+    if (g.status === 'done' && g.translation === translation) return; // 最终结果与流式阶段相同，无需重绘
     g.translation = translation;
     g.status = 'done';
     if (state.enabled) render(g);
@@ -462,17 +646,19 @@
     if (io) io.disconnect();
     if (mo) mo.disconnect();
     io = mo = null;
-    clearTimeout(flushTimer);
+    clearTimeout(pumpTimer);
     clearTimeout(scanTimer);
-    flushTimer = scanTimer = null;
+    pumpTimer = scanTimer = null;
     pendingScanRoots.clear();
+    // 断开进行中的请求，后台会中止对模型的调用，新一轮翻译不必排在它们后面
+    for (const req of activeReqs) req.cancel();
+    activeReqs.clear();
     queue = [];
     inflight.clear();
     for (const g of groups) clearRender(g);
     groups = [];
     blockGroups = new Map();
     processed = new WeakSet();
-    state.pending = 0;
     updateBall();
   }
 
@@ -492,7 +678,7 @@
       enabled: state.enabled,
       detectedLang: state.detectedLang,
       sourceOverride: state.sourceOverride,
-      pending: state.pending,
+      pending: pendingCount(),
       lastError: state.lastError,
       host: location.hostname
     };
@@ -644,7 +830,7 @@
   function updateBall() {
     if (!ball) return;
     ball.classList.toggle('on', state.enabled);
-    ball.classList.toggle('busy', state.enabled && state.pending > 0);
+    ball.classList.toggle('busy', state.enabled && pendingCount() > 0);
   }
 
   // ---------- 提示 ----------
@@ -691,7 +877,11 @@
     selIcon = null;
   }
 
+  let panelReq = null; // 划词面板进行中的请求，关闭面板时取消
+
   function closePanel() {
+    if (panelReq) panelReq.cancel();
+    panelReq = null;
     if (panel) panel.remove();
     panel = null;
   }
@@ -762,15 +952,32 @@
     const from = d.reliable && d.lang !== 'auto' ? d.lang : sourceLang();
     if (!panel || panel !== thisPanel) return;
     thisPanel.querySelector('.langs').textContent = `${L.langName(from)} → ${L.langName(S.targetLang)}`;
-    const resp = await sendMessage({
-      type: 'translate',
-      segments: [text],
-      from,
-      to: S.targetLang,
-      title: document.title,
-      host: location.hostname
-    });
-    if (panel !== thisPanel) return;
+    // urgent：不和整页翻译一起排队；partial：译文边输出边显示
+    const req = streamTranslate(
+      {
+        segments: [text],
+        from,
+        to: S.targetLang,
+        title: document.title,
+        host: location.hostname,
+        urgent: true,
+        partial: true
+      },
+      {
+        onPartial(i, t) {
+          if (panel === thisPanel && !result) out.textContent = t;
+        },
+        onItem(i, t) {
+          if (panel !== thisPanel) return;
+          result = t;
+          out.textContent = t;
+        }
+      }
+    );
+    panelReq = req;
+    const resp = await req.promise;
+    if (panelReq === req) panelReq = null;
+    if (panel !== thisPanel || resp.cancelled) return;
     if (resp && resp.ok) {
       result = resp.translations[0];
       out.textContent = result;

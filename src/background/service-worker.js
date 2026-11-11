@@ -4,21 +4,69 @@ importScripts('/src/shared/languages.js', '/src/shared/config.js', '/src/backgro
 const { getSettings, getProviders } = self.WT_CONFIG;
 const { translateBatch, LLMError } = self.WT_LLM;
 
+const PORT_NAME = 'wt-translate';
+const PARTIAL_INTERVAL_MS = 100; // 划词面板逐字显示时，推送“部分译文”的最小间隔
+
 // API Key 存在 storage.local 中，限制为仅扩展内部页面可访问，网页中的 content script 读不到
 chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
 
-// ---------------- 并发控制 ----------------
+// ---------------- 并发控制（排队中的请求可随时取消） ----------------
 let running = 0;
-const waiters = [];
-async function withLimit(limit, fn) {
-  while (running >= limit) await new Promise((r) => waiters.push(r));
-  running++;
+const waiters = []; // { limit, grant }
+
+function releaseSlot() {
+  running--;
+  while (waiters.length && running < waiters[0].limit) {
+    running++;
+    waiters.shift().grant();
+  }
+}
+
+function acquireSlot(limit, signal) {
+  if (signal && signal.aborted) return Promise.reject(new LLMError('已取消', { cancelled: true }));
+  if (running < limit && !waiters.length) {
+    running++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      const i = waiters.indexOf(w);
+      if (i !== -1) waiters.splice(i, 1);
+      reject(new LLMError('已取消', { cancelled: true }));
+    };
+    const w = {
+      limit,
+      grant: () => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+        resolve();
+      }
+    };
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    waiters.push(w);
+  });
+}
+
+async function withSlot(limit, signal, fn) {
+  await acquireSlot(limit, signal);
   try {
     return await fn();
   } finally {
-    running--;
-    const next = waiters.shift();
-    if (next) next();
+    releaseSlot();
+  }
+}
+
+// 有请求进行时定期调用一次扩展 API，避免等待模型输出期间 service worker 被判定空闲而休眠
+let activeRequests = 0;
+let keepAliveTimer = null;
+function beginRequest() {
+  if (activeRequests++ === 0) {
+    keepAliveTimer = setInterval(() => chrome.runtime.getPlatformInfo().catch(() => {}), 20 * 1000);
+  }
+}
+function endRequest() {
+  if (--activeRequests === 0) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
   }
 }
 
@@ -42,7 +90,13 @@ async function getActiveProvider(settings) {
   return providers.find((p) => p.id === settings.activeProviderId) || providers[0];
 }
 
-async function handleTranslate(msg) {
+/**
+ * opts.onItem(i, text)   ：某一段译文可用时立即回调（缓存命中的段落会最先回调）
+ * opts.onPartial(i, text)：某一段译文正在输出时回调已输出的部分
+ * opts.signal            ：取消信号；取消后不再占用并发名额
+ * opts.urgent            ：用户主动发起的单次翻译（划词、测试连接），不参与排队
+ */
+async function handleTranslate(msg, { signal, onItem, onPartial, urgent } = {}) {
   const settings = await getSettings();
   const provider = msg.provider || (await getActiveProvider(settings));
   const ctx = {
@@ -58,14 +112,21 @@ async function handleTranslate(msg) {
   const missIdx = [];
   segments.forEach((s, i) => {
     const hit = msg.noCache ? undefined : cacheGet(keyPrefix + s);
-    if (hit !== undefined) result[i] = hit;
-    else missIdx.push(i);
+    if (hit !== undefined) {
+      result[i] = hit;
+      if (onItem) onItem(i, hit);
+    } else missIdx.push(i);
   });
   if (missIdx.length) {
     const toSend = missIdx.map((i) => segments[i]);
-    const translated = await withLimit(Math.max(1, Number(settings.concurrency) || 4), () =>
-      translateBatch(provider, toSend, ctx)
-    );
+    const run = () =>
+      translateBatch(provider, toSend, ctx, {
+        signal,
+        onItem: onItem && ((k, t) => onItem(missIdx[k], t)),
+        onPartial: onPartial && ((k, t) => onPartial(missIdx[k], t))
+      });
+    const limit = Math.max(1, Number(settings.concurrency) || 4);
+    const translated = urgent ? await run() : await withSlot(limit, signal, run);
     missIdx.forEach((i, k) => {
       result[i] = translated[k];
       cacheSet(keyPrefix + segments[i], translated[k]);
@@ -74,22 +135,83 @@ async function handleTranslate(msg) {
   return result;
 }
 
+function errorPayload(e) {
+  return {
+    ok: false,
+    error: e.message || String(e),
+    detail: e instanceof LLMError ? e.detail : '',
+    status: e.status
+  };
+}
+
+// 只有扩展自己的页面（设置页“测试连接”）可以传入临时模型配置
+function sanitize(msg, sender) {
+  const fromExtensionPage = !sender.tab && sender.url && sender.url.startsWith(chrome.runtime.getURL(''));
+  if (!fromExtensionPage) delete msg.provider;
+}
+
+/**
+ * 页面翻译与划词翻译走长连接：
+ *  页面 → 后台：{ type: 'translate', segments, from, to, title, host, urgent?, partial? }
+ *  后台 → 页面：{ type: 'item', index, text }（每译好一段立即推送）
+ *              { type: 'partial', index, text }（仅 partial=true 时，正在输出的部分）
+ *              { type: 'done', translations } / { type: 'error', error, detail, status }
+ * 页面断开连接（关闭翻译、切换语言、关闭划词面板、刷新页面）时，立即中止对应的模型请求。
+ */
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== PORT_NAME) return;
+  const ctrl = new AbortController();
+  let started = false;
+  let closed = false;
+  port.onDisconnect.addListener(() => {
+    closed = true;
+    ctrl.abort();
+  });
+  const post = (m) => {
+    if (closed) return;
+    try {
+      port.postMessage(m);
+    } catch (_) {
+      closed = true;
+    }
+  };
+  port.onMessage.addListener((msg) => {
+    if (started || !msg || msg.type !== 'translate') return;
+    started = true;
+    sanitize(msg, port.sender);
+    let lastPartialAt = 0;
+    beginRequest();
+    handleTranslate(msg, {
+      signal: ctrl.signal,
+      urgent: !!msg.urgent,
+      onItem: (index, text) => post({ type: 'item', index, text }),
+      onPartial: msg.partial
+        ? (index, text) => {
+            const now = Date.now();
+            if (now - lastPartialAt < PARTIAL_INTERVAL_MS) return;
+            lastPartialAt = now;
+            post({ type: 'partial', index, text });
+          }
+        : undefined
+    })
+      .then((translations) => post({ type: 'done', translations }))
+      .catch((e) => {
+        if (!ctrl.signal.aborted) post(Object.assign({ type: 'error' }, errorPayload(e)));
+      })
+      .finally(endRequest);
+  });
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return;
   if (msg.type === 'translate') {
-    // 只有扩展自己的页面（设置页“测试连接”）可以传入临时模型配置
-    const fromExtensionPage = !sender.tab && sender.url && sender.url.startsWith(chrome.runtime.getURL(''));
-    if (!fromExtensionPage) delete msg.provider;
-    handleTranslate(msg)
+    // 一次性翻译（设置页“测试连接”）：不排队，结果整体返回
+    sanitize(msg, sender);
+    beginRequest();
+    handleTranslate(msg, { urgent: true })
       .then((translations) => sendResponse({ ok: true, translations }))
-      .catch((e) =>
-        sendResponse({
-          ok: false,
-          error: e.message || String(e),
-          detail: e instanceof LLMError ? e.detail : '',
-          status: e.status
-        })
-      );
+      .catch((e) => sendResponse(errorPayload(e)))
+      .finally(endRequest);
     return true; // 异步响应
   }
   if (msg.type === 'openOptions') {
