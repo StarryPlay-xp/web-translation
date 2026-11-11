@@ -1,0 +1,63 @@
+/* 注入网页的译文样式（仅作用于 wt-trans 自定义元素） */
+wt-trans.wt-trans {
+  font: inherit;
+  color: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  text-indent: 0;
+}
+
+wt-trans.wt-block {
+  display: block;
+  margin: 0.25em 0 0.15em;
+}
+
+wt-trans.wt-inline {
+  display: inline;
+  margin-left: 0.4em;
+}
+
+wt-trans.wt-style-faded {
+  opacity: 0.78;
+}
+
+wt-trans.wt-style-dashed {
+  text-decoration: underline dashed rgba(99, 102, 241, 0.65);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.3em;
+}
+
+wt-trans.wt-style-highlight {
+  background: rgba(253, 224, 71, 0.3);
+  border-radius: 3px;
+  padding: 0 2px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+wt-trans.wt-loading {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.4em;
+  vertical-align: -0.05em;
+  border: 2px solid rgba(99, 102, 241, 0.25);
+  border-top-color: rgba(99, 102, 241, 0.9);
+  border-radius: 50%;
+  animation: wt-spin 0.8s linear infinite;
+}
+
+wt-trans.wt-error {
+  display: inline;
+  margin-left: 0.4em;
+  font-size: 0.85em;
+  color: #dc2626;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+@keyframes wt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
